@@ -1,0 +1,2 @@
+# Prevent direct access to server folder
+Deny from all

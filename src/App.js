@@ -1,24 +1,35 @@
-import logo from './logo.svg';
 import './App.css';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import Home from './pages/home';
+import Navbars from './pages/navbars';
+import Empolyer from './pages/empolyer';
+import AdminHomepage from './pages/adminHomepage';
+import DocumentView from './pages/DocumentView';
+import Login from './pages/login';
+import ProtectedRoute from './components/ProtectedRoute';
 
 function App() {
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
-    </div>
+    <Router>
+      <div className="App">
+        <Navbars/>
+
+        {/* Route configuration */}
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/employer" element={<Empolyer />} />
+          <Route path="/employer/document/:documentId" element={<DocumentView />} />
+          <Route path="/admin/login" element={<Login />} />
+          
+          {/* Protected Admin Route */}
+          <Route path="/admin" element={
+            <ProtectedRoute>
+              <AdminHomepage />
+            </ProtectedRoute>
+          } />
+        </Routes>
+      </div>
+    </Router>
   );
 }
 

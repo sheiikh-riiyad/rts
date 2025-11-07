@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
-import {  useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
+import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
+import { auth } from '../firebase';
 import './Login.css';
 
 function Login() {
@@ -47,42 +49,114 @@ function Login() {
     return Object.keys(newErrors).length === 0;
   };
 
-  // In Login.js, update the handleSubmit function:
-const handleSubmit = async (e) => {
-  e.preventDefault();
-  
-  if (!validateForm()) return;
-
-  setLoading(true);
-  
-  try {
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    // For demo purposes, accept any valid email and password
-    console.log('Login successful:', formData);
-    
-    // Set authentication data in localStorage
-    localStorage.setItem('adminLoggedIn', 'true');
-    localStorage.setItem('adminEmail', formData.email);
-    
-    // Redirect to admin dashboard
-    navigate('/admin');
-    
-  } catch (error) {
-    console.error('Login error:', error);
-    setErrors({ submit: 'Login failed. Please try again.' });
-  } finally {
-    setLoading(false);
-  }
-};
-
-
-
-
-  const handleForgotPassword = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    // Implement forgot password logic here
-    alert('You Are Not Our Head Office Member');
+    
+    if (!validateForm()) return;
+
+    setLoading(true);
+    
+    try {
+      // Firebase authentication
+      const userCredential = await signInWithEmailAndPassword(
+        auth, 
+        formData.email, 
+        formData.password
+      );
+      
+      const user = userCredential.user;
+      
+      console.log('Login successful:', user);
+      
+      // Set authentication data in localStorage
+      localStorage.setItem('adminLoggedIn', 'true');
+      localStorage.setItem('adminEmail', user.email);
+      localStorage.setItem('adminUID', user.uid);
+      
+      // Store token if needed for API calls
+      const token = await user.getIdToken();
+      localStorage.setItem('adminToken', token);
+      
+      // Redirect to admin dashboard
+      navigate('/admin');
+      
+    } catch (error) {
+      console.error('Login error:', error);
+      
+      // Handle specific Firebase auth errors
+      let errorMessage = 'Login failed. Please try again.';
+      
+      switch (error.code) {
+        case 'auth/invalid-email':
+          errorMessage = 'Invalid email address.';
+          break;
+        case 'auth/user-disabled':
+          errorMessage = 'This account has been disabled.';
+          break;
+        case 'auth/user-not-found':
+          errorMessage = 'No account found with this email.';
+          break;
+        case 'auth/wrong-password':
+          errorMessage = 'Incorrect password. Please try again.';
+          break;
+        case 'auth/too-many-requests':
+          errorMessage = 'Too many failed attempts. Please try again later.';
+          break;
+        case 'auth/network-request-failed':
+          errorMessage = 'Network error. Please check your connection.';
+          break;
+        default:
+          errorMessage = 'Login failed. Please try again.';
+          break;
+      }
+      
+      setErrors({ submit: errorMessage });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async (e) => {
+    e.preventDefault();
+    
+    if (!formData.email) {
+      setErrors({ submit: 'Please enter your email address first.' });
+      return;
+    }
+
+    if (!/\S+@\S+\.\S+/.test(formData.email)) {
+      setErrors({ submit: 'Please enter a valid email address.' });
+      return;
+    }
+
+    try {
+      setLoading(true);
+      await sendPasswordResetEmail(auth, formData.email);
+      alert(`Password reset email sent to ${formData.email}. Please check your inbox.`);
+    } catch (error) {
+      console.error('Password reset error:', error);
+      
+      let errorMessage = 'Failed to send reset email. Please try again.';
+      
+      switch (error.code) {
+        case 'auth/user-not-found':
+          errorMessage = 'No account found with this email.';
+          break;
+        case 'auth/invalid-email':
+          errorMessage = 'Invalid email address.';
+          break;
+        case 'auth/too-many-requests':
+          errorMessage = 'Too many attempts. Please try again later.';
+          break;
+        default:
+          errorMessage = 'Failed to send reset email. Please try again.';
+          break;
+      }
+      
+      setErrors({ submit: errorMessage });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -139,6 +213,7 @@ const handleSubmit = async (e) => {
                   type="button" 
                   className="forgot-password"
                   onClick={handleForgotPassword}
+                  disabled={loading}
                 >
                   Forgot Password?
                 </button>
@@ -194,17 +269,17 @@ const handleSubmit = async (e) => {
               )}
             </button>
 
-            {/* Demo Credentials */}
+            {/* Demo Credentials - Remove or update for production */}
             <div className="demo-credentials">
-              <h4>Demo Credentials:</h4>
-              <p>Email: admin@rts.com</p>
-              <p>Password: any password with 6+ characters</p>
+              <h4>Demo Note:</h4>
+              <p>Use your registered admin credentials</p>
+              <p>Contact administrator for account access</p>
             </div>
           </form>
 
           {/* Footer */}
           <div className="login-footer">
-            
+            {/* Add any footer content here */}
           </div>
         </div>
 

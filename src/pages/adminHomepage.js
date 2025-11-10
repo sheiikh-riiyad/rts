@@ -418,8 +418,10 @@ const docRef = await addDoc(collection(firestore, 'applicants'), {
             <h3>Quick Actions</h3>
             <div className="action-buttons">
               <button 
-                className="action-btn"
-                onClick={() => navigate('/documents')}
+
+              onClick={() => navigate('/admin/media')}
+              className="action-btn"
+               
               >
                 View All Applicants
               </button>

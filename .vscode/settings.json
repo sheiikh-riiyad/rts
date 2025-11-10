@@ -1,0 +1,6 @@
+{
+  "terminal.integrated.defaultProfile.linux": "bash",
+  "terminal.integrated.env.linux": {
+    "PATH": "/home/stubborn-developer/.nvm/versions/node/v24.11.0/bin:${env:PATH}"
+  }
+}

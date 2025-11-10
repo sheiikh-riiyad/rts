@@ -282,9 +282,9 @@ function DocumentView() {
                         <p className="file-type">
                           {getFileType(applicant.fileName).toUpperCase()} Document
                         </p>
-                        <p className="file-url">
+                        {/* <p className="file-url">
                           {applicant.fileUrl}
-                        </p>
+                        </p> */}
                       </div>
                     </div>
                     

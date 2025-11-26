@@ -1,50 +1,138 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
+import { collection, getDocs, query, orderBy } from 'firebase/firestore';
 import { firestore } from '../firebase';
-import { collection, getDocs } from 'firebase/firestore';
-import './Employer.css';
+import './Empolyer.css';
 
-function Employer() {
+function Empolyer() {
   const [applicants, setApplicants] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [sortBy, setSortBy] = useState('newest');
+  const [filteredApplicants, setFilteredApplicants] = useState([]);
+  const location = useLocation();
 
-  useEffect(() => {
-    fetchApplicants();
+  // Helper function to mask passport number
+  const maskPassportNumber = (passportNumber) => {
+    if (!passportNumber) return 'N/A';
+    if (passportNumber.length <= 4) return passportNumber;
+    
+    const firstTwo = passportNumber.substring(0, 2);
+    const lastTwo = passportNumber.substring(passportNumber.length - 2);
+    const maskedLength = passportNumber.length - 4;
+    
+    return `${firstTwo}${'*'.repeat(maskedLength)}${lastTwo}`;
+  };
+
+  // Get document type from URL parameters
+  const getDocumentTypeFromURL = () => {
+    const urlParams = new URLSearchParams(location.search);
+    return urlParams.get('type') || 'all';
+  };
+
+  const documentType = getDocumentTypeFromURL();
+
+  // Apply filtering based on document type and search term
+  const applyFilter = React.useCallback((data, docType, search) => {
+    let filtered = data;
+
+    // Filter by document type if not 'all'
+    if (docType !== 'all') {
+      const typeMap = {
+        'immigration': 'immigration',
+        'work_permit': 'work_permit', 
+        'lmis': 'lmis',
+        'job_offer': 'job_offer',
+        'visa': 'visa'
+      };
+      
+      const targetType = typeMap[docType];
+      if (targetType) {
+        filtered = filtered.filter(applicant => 
+          applicant.documentType === targetType
+        );
+      }
+    }
+
+    // Filter by search term
+    if (search.trim() !== '') {
+      filtered = filtered.filter(applicant =>
+        applicant.name.toLowerCase().includes(search.toLowerCase()) ||
+        applicant.passportNumber.toLowerCase().includes(search.toLowerCase())
+      );
+    }
+
+    setFilteredApplicants(filtered);
   }, []);
 
-  const fetchApplicants = async () => {
-    try {
-      setLoading(true);
-      const querySnapshot = await getDocs(collection(firestore, 'applicants'));
-      const applicantsData = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      setApplicants(applicantsData);
-    } catch (error) {
-      console.error('Error fetching applicants:', error);
-    } finally {
-      setLoading(false);
-    }
+  useEffect(() => {
+    const fetchApplicants = async () => {
+      try {
+        setLoading(true);
+        
+        // Get all applicants (we'll filter client-side due to nested structure)
+        const applicantsQuery = query(
+          collection(firestore, 'applicants'),
+          orderBy('uploadedAt', 'desc')
+        );
+
+        const querySnapshot = await getDocs(applicantsQuery);
+        const applicantsData = [];
+        
+        querySnapshot.forEach((doc) => {
+          const data = doc.data();
+          applicantsData.push({
+            id: doc.id,
+            name: data.name,
+            passportNumber: data.passportNumber,
+            documentType: data.documentType,
+            status: data.status,
+            uploadedAt: data.uploadedAt,
+            fileUrl: data.fileUrl,
+            fileName: data.fileName,
+            docPassword: data.docPassword
+          });
+        });
+        
+        setApplicants(applicantsData);
+        
+        // Apply initial filter based on URL parameter
+        applyFilter(applicantsData, documentType, searchTerm);
+      } catch (error) {
+        console.error('Error fetching applicants:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchApplicants();
+  }, [documentType, applyFilter, searchTerm]); // Fixed: added searchTerm and applyFilter to dependencies
+
+  // Update filtered applicants when search term changes
+  useEffect(() => {
+    applyFilter(applicants, documentType, searchTerm);
+  }, [searchTerm, applicants, documentType, applyFilter]);
+
+  const getPageTitle = () => {
+    const titles = {
+      'immigration': 'Immigration Documents',
+      'work_permit': 'Work Permit Documents', 
+      'lmis': 'LMIA Documents',
+      'job_offer': 'Job Offer Documents',
+      'visa': 'Visa Documents',
+      'all': 'All Documents'
+    };
+    return titles[documentType] || 'Documents';
   };
 
   const getStatusBadge = (status) => {
     const statusConfig = {
-      pending: { class: 'status-pending', label: 'Pending', icon: '⏳' },
-      approved: { class: 'status-approved', label: 'Approved', icon: '✅' },
-      rejected: { class: 'status-rejected', label: 'Rejected', icon: '❌' },
-      review: { class: 'status-review', label: 'Under Review', icon: '🔍' }
+      pending: { class: 'status-pending', label: 'Pending' },
+      approved: { class: 'status-approved', label: 'Approved' },
+      rejected: { class: 'status-rejected', label: 'Rejected' }
     };
     
     const config = statusConfig[status?.toLowerCase()] || statusConfig.pending;
-    return (
-      <span className={`status-badge ${config.class}`}>
-        <span className="status-icon">{config.icon}</span>
-        {config.label}
-      </span>
-    );
+    return <span className={`status-badge ${config.class}`}>{config.label}</span>;
   };
 
   const formatDate = (timestamp) => {
@@ -53,209 +141,144 @@ function Employer() {
       return timestamp.toDate().toLocaleDateString('en-US', {
         year: 'numeric',
         month: 'short',
-        day: 'numeric'
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
       });
     } catch (error) {
       return 'Invalid Date';
     }
   };
 
-  // Filter and sort applicants
-  const filteredApplicants = applicants
-    .filter(applicant =>
-      applicant.passportNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      applicant.name.toLowerCase().includes(searchTerm.toLowerCase())
-    )
-    .sort((a, b) => {
-      switch (sortBy) {
-        case 'newest':
-          return (b.uploadedAt?.toDate?.() || 0) - (a.uploadedAt?.toDate?.() || 0);
-        case 'oldest':
-          return (a.uploadedAt?.toDate?.() || 0) - (b.uploadedAt?.toDate?.() || 0);
-        case 'name':
-          return a.name.localeCompare(b.name);
-        default:
-          return 0;
-      }
-    });
+  const formatDocumentType = (type) => {
+    const typeMap = {
+      'immigration': 'Immigration',
+      'work_permit': 'Work Permit',
+      'lmis': 'LMIA',
+      'job_offer': 'Job Offer',
+      'visa': 'Visa'
+    };
+    return typeMap[type] || type;
+  };
 
   if (loading) {
     return (
-      <div className="employer-container">
+      <div className="employer-page">
         <div className="loading-section">
           <div className="loading-spinner"></div>
-          <p>Loading applicants data...</p>
+          <p>Loading documents...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="employer-container">
-      <div className="employer-header">
-        <div className="header-content">
-          <div className="header-main">
-            <h1>Applicant Management</h1>
-            <p>View and manage all applicant documents securely</p>
-          </div>
-          <div className="header-stats">
-            <div className="stat-item">
-              <div className="stat-icon">📊</div>
-              <div className="stat-info">
-                <span className="stat-number">{applicants.length}</span>
-                <span className="stat-label">Total Applicants</span>
-              </div>
-            </div>
-            <div className="stat-item">
-              <div className="stat-icon">✅</div>
-              <div className="stat-info">
-                <span className="stat-number">
-                  {applicants.filter(a => a.status?.toLowerCase() === 'approved').length}
-                </span>
-                <span className="stat-label">Approved</span>
-              </div>
-            </div>
-            <div className="stat-item">
-              <div className="stat-icon">⏳</div>
-              <div className="stat-info">
-                <span className="stat-number">
-                  {applicants.filter(a => a.status?.toLowerCase() === 'pending').length}
-                </span>
-                <span className="stat-label">Pending</span>
-              </div>
-            </div>
-          </div>
+    <div className="employer-page">
+      <div className="employer-container">
+        <div className="page-header">
+          <h1>{getPageTitle()}</h1>
+          <p>View and manage applicant documents</p>
         </div>
-      </div>
 
-      <div className="employer-content">
-        {/* Controls Section */}
         <div className="controls-section">
-          <div className="search-container">
-            <div className="search-input-wrapper">
-              <span className="search-icon">🔍</span>
-              <input
-                type="text"
-                placeholder="Search by passport number or name..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="search-input"
-              />
-              {searchTerm && (
-                <button 
-                  className="clear-search"
-                  onClick={() => setSearchTerm('')}
-                >
-                  ✕
-                </button>
-              )}
-            </div>
+          <div className="search-box">
+            <input
+              type="text"
+              placeholder="Search by name or passport number..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="search-input"
+            />
           </div>
-
-          <div className="sort-container">
-            <label htmlFor="sort">Sort by:</label>
-            <select 
-              id="sort"
-              value={sortBy} 
-              onChange={(e) => setSortBy(e.target.value)}
-              className="sort-select"
-            >
-              <option value="newest">Newest First</option>
-              <option value="oldest">Oldest First</option>
-              <option value="name">Name A-Z</option>
-            </select>
+          
+          <div className="filter-info">
+            <span className="results-count">
+              Showing {filteredApplicants.length} of {applicants.length} documents
+            </span>
           </div>
         </div>
 
-        {/* Results Info */}
-        <div className="results-info">
-          <span className="results-count">
-            Showing {filteredApplicants.length} of {applicants.length} applicants
-            {searchTerm && ` for "${searchTerm}"`}
-          </span>
-          <button 
-            onClick={fetchApplicants}
-            className="refresh-btn"
-            title="Refresh data"
-          >
-            🔄 Refresh
-          </button>
-        </div>
-
-        {applicants.length === 0 ? (
+        {filteredApplicants.length === 0 ? (
           <div className="empty-state">
             <div className="empty-icon">📄</div>
-            <h3>No Applicants Found</h3>
-            <p>There are no applicants in the system yet. Start by adding new applicants from the admin panel.</p>
-            <Link to="/admin/login" className="empty-state-btn">
-              Go to Admin Panel
-            </Link>
-          </div>
-        ) : filteredApplicants.length === 0 ? (
-          <div className="empty-state">
-            <div className="empty-icon">🔍</div>
-            <h3>No Results Found</h3>
-            <p>No applicants match your search criteria. Try adjusting your search terms.</p>
-            <button 
-              onClick={() => setSearchTerm('')}
-              className="empty-state-btn"
-            >
-              Clear Search
-            </button>
+            <h3>No documents found</h3>
+            <p>
+              {searchTerm 
+                ? `No documents match your search for "${searchTerm}"`
+                : documentType !== 'all'
+                ? `No ${getPageTitle().toLowerCase()} available.`
+                : 'No documents available at the moment.'
+              }
+            </p>
+            {documentType !== 'all' && (
+              <button 
+                className="view-all-btn"
+              >
+                No Applicants here 
+              </button>
+            )}
           </div>
         ) : (
-          <div className="applicants-table">
-            {/* Table Header */}
-            <div className="table-header">
-              <div className="table-row header-row">
-                <div className="table-col col-name">Applicant Name</div>
-                <div className="table-col col-passport">Passport Number</div>
-                <div className="table-col col-status">Status</div>
-                <div className="table-col col-date">Submission Date</div>
-                <div className="table-col col-actions">Actions</div>
-              </div>
-            </div>
-
-            {/* Table Body */}
-            <div className="table-body">
-              {filteredApplicants.map((applicant) => (
-                <div key={applicant.id} className="table-row applicant-row">
-                  <div className="table-col col-name">
-                    <div className="applicant-info">
-                      <div className="applicant-avatar">
-                        {applicant.name.charAt(0).toUpperCase()}
-                      </div>
-                      <div className="applicant-details">
-                        <span className="applicant-name">{applicant.name}</span>
-                        <span className="applicant-id">ID: {applicant.id.slice(0, 8)}...</span>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="table-col col-passport">
-                    <span className="passport-number">{applicant.passportNumber}</span>
-                  </div>
-                  
-                  <div className="table-col col-status">
-                    {getStatusBadge(applicant.status)}
-                  </div>
-                  
-                  <div className="table-col col-date">
-                    <span className="submission-date">{formatDate(applicant.uploadedAt)}</span>
-                  </div>
-                  
-                  <div className="table-col col-actions">
-                    <Link 
-                      to={`/employer/document/${applicant.id}`}
-                      className="view-document-btn"
-                    >
-                      <span className="btn-icon">👁️</span>
-                      View Document
-                    </Link>
-                  </div>
-                </div>
-              ))}
-            </div>
+          <div className="applicants-table-container">
+            <table className="applicants-table">
+              <thead>
+                <tr>
+                  <th>Applicant Name</th>
+                  <th>Passport Number</th>
+                  <th>Document Type</th>
+                  <th>Status</th>
+                  <th>Upload Date</th>
+                  <th>File</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredApplicants.map((applicant) => (
+                  <tr key={applicant.id} className="applicant-row">
+                    <td className="applicant-name">
+                      <strong>{applicant.name}</strong>
+                    </td>
+                    <td className="passport-number">
+                      {maskPassportNumber(applicant.passportNumber)}
+                    </td>
+                    <td className="document-type">
+                      {formatDocumentType(applicant.documentType)}
+                    </td>
+                    <td className="status-cell">
+                      {getStatusBadge(applicant.status)}
+                    </td>
+                    <td className="upload-date">
+                      {formatDate(applicant.uploadedAt)}
+                    </td>
+                    <td className="file-info">
+                      {applicant.fileName && (
+                        <div className="file-details">
+                          <span className="file-name">{applicant.fileName}</span>
+                          {applicant.fileUrl && (
+                            <a 
+                              href={applicant.fileUrl} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="file-link"
+                            >
+                              View File
+                            </a>
+                          )}
+                        </div>
+                      )}
+                    </td>
+                    <td className="actions">
+                      <a 
+                        href={`/employer/document/${applicant.id}`}
+                        className="view-btn"
+                      >
+                        View Details
+                      </a>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
@@ -263,4 +286,4 @@ function Employer() {
   );
 }
 
-export default Employer;
+export default Empolyer;

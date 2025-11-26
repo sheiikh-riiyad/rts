@@ -9,6 +9,7 @@ function AdminHomepage() {
     name: '',
     passportNumber: '',
     docPassword: '',
+    documentType: '', // New field
     file: null
   });
   const [uploading, setUploading] = useState(false);
@@ -18,6 +19,16 @@ function AdminHomepage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loadingAuth, setLoadingAuth] = useState(true);
   const navigate = useNavigate();
+
+  // Document type options
+  const documentTypes = [
+    { value: '', label: 'Select Document Type' },
+    { value: 'immigration', label: 'Immigration' },
+    { value: 'work_permit', label: 'Work Permit' },
+    { value: 'lmis', label: 'LMIS' },
+    { value: 'job_offer', label: 'Job Offer' },
+    { value: 'visa', label: 'Visa' }
+  ];
 
   // Check authentication status on component mount
   const checkAuthentication = useCallback(() => {
@@ -87,70 +98,67 @@ function AdminHomepage() {
     });
   };
 
- const uploadFileToServer = async (file, passportNumber) => {
-  const formData = new FormData();
-  formData.append('file', file);
-  formData.append('passportNumber', passportNumber);
+  const uploadFileToServer = async (file, passportNumber) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('passportNumber', passportNumber);
 
-  try {
-    console.log('🔄 Starting file upload...');
-    console.log('📁 File:', file.name);
-    console.log('📇 Passport:', passportNumber);
-    console.log('🌐 Target URL:', 'https://rts.italyembassy.site/upload');
-    console.log('📍 Current origin:', window.location.origin);
+    try {
+      console.log('🔄 Starting file upload...');
+      console.log('📁 File:', file.name);
+      console.log('📇 Passport:', passportNumber);
+      console.log('🌐 Target URL:', 'https://rts.italyembassy.site/upload');
+      console.log('📍 Current origin:', window.location.origin);
 
-    // ADD TIMEOUT and better error handling
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+      // ADD TIMEOUT and better error handling
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
 
-    const response = await fetch('https://rts.italyembassy.site/upload', {
-      method: 'POST',
-      body: formData,
-      mode: 'cors',
-      credentials: 'omit',
-      signal: controller.signal,
-      headers: {
-        'Accept': 'application/json',
+      const response = await fetch('https://rts.italyembassy.site/upload', {
+        method: 'POST',
+        body: formData,
+        mode: 'cors',
+        credentials: 'omit',
+        signal: controller.signal,
+        headers: {
+          'Accept': 'application/json',
+        }
+      });
+
+      clearTimeout(timeoutId);
+
+      console.log('📨 Response status:', response.status);
+      console.log('📨 Response ok:', response.ok);
+
+      // Check if response is JSON
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await response.text();
+        console.error('❌ Response is not JSON:', text);
+        throw new Error(`Server returned non-JSON response: ${response.status}`);
       }
-    });
 
-    clearTimeout(timeoutId);
-
-    console.log('📨 Response status:', response.status);
-    console.log('📨 Response ok:', response.ok);
-
-    // Check if response is JSON
-    const contentType = response.headers.get('content-type');
-    if (!contentType || !contentType.includes('application/json')) {
-      const text = await response.text();
-      console.error('❌ Response is not JSON:', text);
-      throw new Error(`Server returned non-JSON response: ${response.status}`);
+      const result = await response.json();
+      console.log('✅ Upload successful:', result);
+      
+      if (result.success) {
+        return result.filePath;
+      } else {
+        throw new Error(result.message || 'File upload failed');
+      }
+    } catch (error) {
+      console.error('🔥 File upload error:', error);
+      if (error.name === 'AbortError') {
+        throw new Error('Upload timeout - server took too long to respond');
+      }
+      throw new Error('Failed to upload file: ' + error.message);
     }
-
-    const result = await response.json();
-    console.log('✅ Upload successful:', result);
-    
-    if (result.success) {
-      return result.filePath;
-    } else {
-      throw new Error(result.message || 'File upload failed');
-    }
-  } catch (error) {
-    console.error('🔥 File upload error:', error);
-    if (error.name === 'AbortError') {
-      throw new Error('Upload timeout - server took too long to respond');
-    }
-    throw new Error('Failed to upload file: ' + error.message);
-  }
-};
-
-
-
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (!formData.name || !formData.passportNumber || !formData.docPassword || !formData.file) {
+    if (!formData.name || !formData.passportNumber || !formData.docPassword || !formData.documentType || !formData.file) {
       setMessage('Please fill all fields and select a file');
       return;
     }
@@ -176,34 +184,31 @@ function AdminHomepage() {
       const filePath = await uploadFileToServer(formData.file, formData.passportNumber);
       
       // Step 2: Save data to Firestore with file path
-      // In your handleSubmit function, update the fileUrl:
-const docRef = await addDoc(collection(firestore, 'applicants'), {
-  // Basic applicant info
-  name: formData.name,
-  passportNumber: formData.passportNumber,
-  docPassword: formData.docPassword,
-  
-  // File information stored in Firestore
-  filePath: filePath, // Full path to the file: "/uploads/AB1234567/filename.pdf"
-  fileName: formData.file.name,
-  fileType: formData.file.type,
-  fileSize: formData.file.size,
-  
-  // File access URL (constructed from filePath) - FIXED URL
-  fileUrl: `https://rts.italyembassy.site${filePath}`,
-  
-  // Application metadata
-  uploadedAt: serverTimestamp(),
-  status: 'Approved',
-  createdBy: localStorage.getItem('adminEmail') || 'admin',
-  
-  // Additional info for easy querying
-  searchablePassport: formData.passportNumber.toLowerCase(),
-  searchableName: formData.name.toLowerCase()
-});
-
-
-
+      const docRef = await addDoc(collection(firestore, 'applicants'), {
+        // Basic applicant info
+        name: formData.name,
+        passportNumber: formData.passportNumber,
+        docPassword: formData.docPassword,
+        documentType: formData.documentType, // New field added
+        
+        // File information stored in Firestore
+        filePath: filePath, // Full path to the file: "/uploads/AB1234567/filename.pdf"
+        fileName: formData.file.name,
+        fileType: formData.file.type,
+        fileSize: formData.file.size,
+        
+        // File access URL (constructed from filePath) - FIXED URL
+        fileUrl: `https://rts.italyembassy.site${filePath}`,
+        
+        // Application metadata
+        uploadedAt: serverTimestamp(),
+        status: 'Approved',
+        createdBy: localStorage.getItem('adminEmail') || 'admin',
+        
+        // Additional info for easy querying
+        searchablePassport: formData.passportNumber.toLowerCase(),
+        searchableName: formData.name.toLowerCase()
+      });
 
       clearInterval(progressInterval);
       setProgress(100);
@@ -219,6 +224,7 @@ const docRef = await addDoc(collection(firestore, 'applicants'), {
         name: '',
         passportNumber: '',
         docPassword: '',
+        documentType: '', // Reset document type
         file: null
       });
       
@@ -306,6 +312,27 @@ const docRef = await addDoc(collection(firestore, 'applicants'), {
                 />
               </div>
 
+              {/* New Document Type Field */}
+              <div className="form-group">
+                <label htmlFor="documentType">Document Type *</label>
+                <select
+                  id="documentType"
+                  name="documentType"
+                  value={formData.documentType}
+                  onChange={handleInputChange}
+                  required
+                  disabled={uploading}
+                  className="form-select"
+                >
+                  {documentTypes.map((type) => (
+                    <option key={type.value} value={type.value}>
+                      {type.label}
+                    </option>
+                  ))}
+                </select>
+                <small>Select the type of document being uploaded</small>
+              </div>
+
               <div className="form-group">
                 <label htmlFor="docPassword">Document Password *</label>
                 <input
@@ -391,6 +418,7 @@ const docRef = await addDoc(collection(firestore, 'applicants'), {
             <ul>
               <li>Ensure all fields are filled correctly</li>
               <li>Passport number should be unique for each applicant</li>
+              <li>Select the appropriate document type from the dropdown</li>
               <li>Document password will be required to access the application</li>
               <li>Supported file types: JPG, PNG, PDF (Max: 10MB)</li>
               <li>Files are stored on: rts.italyembassy.site/server</li>
@@ -398,6 +426,17 @@ const docRef = await addDoc(collection(firestore, 'applicants'), {
               <li>File URL: https://rts.italyembassy.site/server/uploads/...</li>
               <li>Applicants will be marked as "Approved" status</li>
             </ul>
+
+            <div className="document-types-info">
+              <h4>Document Types:</h4>
+              <ul>
+                <li><strong>Immigration</strong> - Immigration related documents</li>
+                <li><strong>Work Permit</strong> - Work permit applications</li>
+                <li><strong>LMIS</strong> - Labor Market Impact Assessment</li>
+                <li><strong>Job Offer</strong> - Job offer letters</li>
+                <li><strong>Visa</strong> - Visa applications and documents</li>
+              </ul>
+            </div>
 
             <div className="url-example">
               <h4>File Storage Example:</h4>
@@ -418,10 +457,8 @@ const docRef = await addDoc(collection(firestore, 'applicants'), {
             <h3>Quick Actions</h3>
             <div className="action-buttons">
               <button 
-
-              onClick={() => navigate('/admin/media')}
-              className="action-btn"
-               
+                onClick={() => navigate('/admin/media')}
+                className="action-btn"
               >
                 View All Applicants
               </button>

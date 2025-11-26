@@ -10,6 +10,8 @@
 
 # production
 /build
+/public_html
+/public_html.zip
 
 # misc
 .DS_Store

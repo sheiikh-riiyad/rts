@@ -42,27 +42,27 @@ function Navbars() {
               </Link>
             </li>
             <li className="nav-item">
-              <Link to="/employer" className="nav-link" onClick={closeMenu}>
+              <Link to="/employer?type=immigration" className="nav-link" onClick={closeMenu}>
                 Immigration
               </Link>
             </li>
             <li className="nav-item">
-              <Link to="/employer" className="nav-link" onClick={closeMenu}>
+              <Link to="/employer?type=work_permit" className="nav-link" onClick={closeMenu}>
                 Work Permit
               </Link>
             </li>
             <li className="nav-item">
-              <Link to="/employer" className="nav-link" onClick={closeMenu}>
+              <Link to="/employer?type=lmis" className="nav-link" onClick={closeMenu}>
                 LMIA
               </Link>
             </li>
             <li className="nav-item">
-              <Link to="/employer" className="nav-link" onClick={closeMenu}>
+              <Link to="/employer?type=job_offer" className="nav-link" onClick={closeMenu}>
                 Job Offer
               </Link>
             </li>
             <li className="nav-item">
-              <Link to="/employer" className="nav-link" onClick={closeMenu}>
+              <Link to="/employer?type=visa" className="nav-link" onClick={closeMenu}>
                 VISA
               </Link>
             </li>

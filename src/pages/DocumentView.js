@@ -16,6 +16,21 @@ function DocumentView() {
   const [passwordAttempted, setPasswordAttempted] = useState(false);
   const [documentLoading, setDocumentLoading] = useState(false);
 
+
+  const maskPassportNumber = (passportNumber) => {
+  if (!passportNumber) return 'N/A';
+  if (passportNumber.length <= 4) return passportNumber;
+  
+  const firstTwo = passportNumber.substring(0, 2);
+  const lastTwo = passportNumber.substring(passportNumber.length - 2);
+  const maskedLength = passportNumber.length - 4;
+  
+  return `${firstTwo}${'*'.repeat(maskedLength)}${lastTwo}`;
+};
+
+
+
+
   useEffect(() => {
     const fetchApplicant = async () => {
       try {
@@ -184,9 +199,9 @@ function DocumentView() {
                   <span>{applicant.name}</span>
                 </div>
                 <div className="preview-item">
-                  <label>Passport Number:</label>
-                  <span>{applicant.passportNumber}</span>
-                </div>
+  <label>Passport Number:</label>
+  <span>{maskPassportNumber(applicant.passportNumber)}</span>
+</div>
                 <div className="preview-item">
                   <label>Status:</label>
                   {getStatusBadge(applicant.status)}
@@ -263,6 +278,12 @@ function DocumentView() {
                     <label>Current Status:</label>
                     <span className={`status-text status-${applicant.status?.toLowerCase()}`}>
                       {applicant.status}
+                    </span>
+                  </div>
+                  <div className="detail-item">
+                    <label>Document Type:</label>
+                    <span className={`status-text status-${applicant.documentType?.toLowerCase()}`}>
+                      {applicant.documentType}
                     </span>
                   </div>
                 </div>
